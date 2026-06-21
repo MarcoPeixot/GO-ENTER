@@ -1,0 +1,15 @@
+# env / secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# go
+backend/server
+*.out
+
+# local data
+data/
