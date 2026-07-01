@@ -13,6 +13,7 @@ RUN CGO_ENABLED=0 go build -o /out/server ./cmd/server
 FROM alpine:3.20
 RUN adduser -D -u 10001 app
 WORKDIR /app
+RUN mkdir -p /data/uploads && chown -R app:app /data
 COPY --from=build /out/server /app/server
 USER app
 EXPOSE 8080

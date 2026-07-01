@@ -20,10 +20,10 @@ import (
 
 // Handler bundles the dependencies needed to serve the document API.
 type Handler struct {
-	cfg     config.Config
-	repo    *repository.Repository
-	store   storage.Storage
-	pub     *queue.Publisher
+	cfg   config.Config
+	repo  *repository.Repository
+	store storage.Storage
+	pub   *queue.Publisher
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, store storage.Storage, pub *queue.Publisher) *Handler {
@@ -32,6 +32,7 @@ func NewHandler(cfg config.Config, repo *repository.Repository, store storage.St
 
 // Register wires the routes onto the given gin engine.
 func (h *Handler) Register(r *gin.Engine) {
+	RegisterOpenAPIDocs(r)
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 	r.POST("/documents", h.createDocument)
 	r.GET("/documents/:id", h.getDocument)

@@ -125,6 +125,18 @@ no mesmo caso para ver um `DIFFERENT` / `SEMANTICALLY_RELATED`.
 
 ## Endpoints
 
+A documentação interativa fica disponível no backend:
+
+```text
+http://localhost:8080/swagger
+```
+
+A especificação OpenAPI fica em:
+
+```text
+http://localhost:8080/openapi.yaml
+```
+
 ### `POST /documents`
 `multipart/form-data` com `file` e `case_id`. Valida extensão (`.txt`, `.pdf`,
 `.docx`) e tamanho. Responde **202 Accepted**:
@@ -144,6 +156,10 @@ no mesmo caso para ver um `DIFFERENT` / `SEMANTICALLY_RELATED`.
 ```
 
 ### `GET /documents/{id}/matches`
+Retorna os resultados de comparação contra candidatos do mesmo `case_id`.
+Apesar do nome do campo, `matches` também inclui `DIFFERENT` quando um
+documento foi comparado e considerado diferente.
+
 ```json
 {
   "document_id": "uuid",
@@ -157,6 +173,16 @@ no mesmo caso para ver um `DIFFERENT` / `SEMANTICALLY_RELATED`.
       "reason": "Alta sobreposição textual e estrutura semelhante.",
       "evidence": [
         { "source_chunk": "…", "matched_chunk": "…", "similarity": 0.93 }
+      ]
+    },
+    {
+      "matched_document_id": "uuid",
+      "relation_type": "DIFFERENT",
+      "near_duplicate_score": 0,
+      "semantic_score": 0.51,
+      "reason": "Sem candidato relevante (MinHash=0.00, semântica=0.51, trechos fortes=0%).",
+      "evidence": [
+        { "source_chunk": "…", "matched_chunk": "…", "similarity": 0.51 }
       ]
     }
   ]
@@ -173,7 +199,7 @@ A decisão primária é **determinística** (sem multiplicar scores), nesta orde
    similaridade ≥ `CHUNK_SIM_THRESHOLD`** → `NEAR_DUPLICATE`.
 4. **Similaridade semântica média ≥ `SEMANTIC_RELATED`** *e* **MinHash <
    `MINHASH_SEMANTIC_MAX`** → `SEMANTICALLY_RELATED`.
-5. Caso contrário → `DIFFERENT` (não é gravado como match).
+5. Caso contrário → `DIFFERENT` (gravado para deixar explícito que houve comparação).
 
 Etapas do worker: leitura → extração (TXT/PDF/DOCX) → normalização → mascaramento
 (datas, valores, nº de processo, CPF/CNPJ) → hashes → MinHash (shingles de 5

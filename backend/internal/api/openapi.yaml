@@ -1,0 +1,327 @@
+openapi: 3.0.3
+info:
+  title: GO-ENTER Document Similarity API
+  version: 1.0.0
+  description: API for uploading legal documents, tracking processing status, and retrieving similarity matches within a case.
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose backend
+tags:
+  - name: Health
+    description: Service health checks
+  - name: Documents
+    description: Document ingestion and similarity results
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Check backend health
+      operationId: getHealth
+      responses:
+        "200":
+          description: Backend is reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+  /documents:
+    post:
+      tags:
+        - Documents
+      summary: Upload a document for processing
+      operationId: createDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - case_id
+                - file
+              properties:
+                case_id:
+                  type: string
+                  description: Case identifier. Documents are compared only inside the same case.
+                  example: caso-001
+                file:
+                  type: string
+                  format: binary
+                  description: Document file. Supported extensions are .txt, .pdf, and .docx.
+      responses:
+        "202":
+          description: Document accepted and queued for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentUploadResponse"
+              example:
+                document_id: 9e0f0d3c-1f58-4f70-9ee5-17c726c1df64
+                status: PROCESSING
+        "400":
+          description: Missing case_id, missing file, or empty file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Uploaded file exceeds the maximum allowed size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported file extension
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Could not create, store, or enqueue the document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /documents/{id}:
+    get:
+      tags:
+        - Documents
+      summary: Get document status and metadata
+      operationId: getDocument
+      parameters:
+        - $ref: "#/components/parameters/DocumentID"
+      responses:
+        "200":
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+              example:
+                document_id: 9e0f0d3c-1f58-4f70-9ee5-17c726c1df64
+                case_id: caso-001
+                filename: contrato_a.txt
+                storage_path: /data/uploads/9e0f0d3c-1f58-4f70-9ee5-17c726c1df64.txt
+                status: PROCESSED
+                file_hash: b3f0f6d2e6e0a8f5f1f8fbf1c314d685c1f09ad58b7e9ec61f8d7e7d81f51f5d
+                text_hash: e3f0f6d2e6e0a8f5f1f8fbf1c314d685c1f09ad58b7e9ec61f8d7e7d81f51f5a
+                created_at: "2026-07-01T12:00:00Z"
+                updated_at: "2026-07-01T12:00:08Z"
+        "400":
+          description: Invalid document UUID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Could not fetch document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /documents/{id}/matches:
+    get:
+      tags:
+        - Documents
+      summary: Get comparison results for a document
+      operationId: getDocumentMatches
+      parameters:
+        - $ref: "#/components/parameters/DocumentID"
+      responses:
+        "200":
+          description: Comparison results for the document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentMatchesResponse"
+              example:
+                document_id: 9e0f0d3c-1f58-4f70-9ee5-17c726c1df64
+                status: PROCESSED
+                matches:
+                  - matched_document_id: e8c02962-65fd-4978-a1de-c7a7c8c0f0d5
+                    relation_type: NEAR_DUPLICATE
+                    near_duplicate_score: 0.91
+                    semantic_score: 0.84
+                    reason: Alta sobreposicao textual e estrutura semelhante.
+                    evidence:
+                      - source_chunk: Trecho do documento enviado.
+                        matched_chunk: Trecho do documento relacionado.
+                        similarity: 0.93
+                    created_at: "2026-07-01T12:00:10Z"
+                  - matched_document_id: a7afcb45-4f75-4da4-8b0e-928862fb0bb5
+                    relation_type: DIFFERENT
+                    near_duplicate_score: 0
+                    semantic_score: 0.51
+                    reason: Sem candidato relevante (MinHash=0.00, semantica=0.51, trechos fortes=0%).
+                    evidence:
+                      - source_chunk: Trecho do documento enviado.
+                        matched_chunk: Trecho do documento comparado.
+                        similarity: 0.51
+                    created_at: "2026-07-01T12:00:20Z"
+        "400":
+          description: Invalid document UUID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Could not fetch matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  parameters:
+    DocumentID:
+      name: id
+      in: path
+      required: true
+      description: Document UUID
+      schema:
+        type: string
+        format: uuid
+      example: 9e0f0d3c-1f58-4f70-9ee5-17c726c1df64
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+    DocumentUploadResponse:
+      type: object
+      required:
+        - document_id
+        - status
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+    Document:
+      type: object
+      required:
+        - document_id
+        - case_id
+        - filename
+        - storage_path
+        - status
+        - created_at
+        - updated_at
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        case_id:
+          type: string
+        filename:
+          type: string
+        storage_path:
+          type: string
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        file_hash:
+          type: string
+          nullable: true
+        text_hash:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DocumentMatchesResponse:
+      type: object
+      description: Candidate comparisons for the document. Despite the field name, matches includes DIFFERENT results when a processed same-case candidate was compared.
+      required:
+        - document_id
+        - status
+        - matches
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/Match"
+    Match:
+      type: object
+      required:
+        - matched_document_id
+        - relation_type
+        - near_duplicate_score
+        - semantic_score
+        - reason
+        - evidence
+        - created_at
+      properties:
+        matched_document_id:
+          type: string
+          format: uuid
+        relation_type:
+          $ref: "#/components/schemas/RelationType"
+        near_duplicate_score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        semantic_score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        reason:
+          type: string
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    DocumentStatus:
+      type: string
+      enum:
+        - PROCESSING
+        - PROCESSED
+        - FAILED
+        - NEEDS_OCR
+    RelationType:
+      type: string
+      enum:
+        - EXACT_FILE_DUPLICATE
+        - EXACT_TEXT_DUPLICATE
+        - NEAR_DUPLICATE
+        - SEMANTICALLY_RELATED
+        - DIFFERENT
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
