@@ -113,28 +113,13 @@ def process_document(conn, job):
     top = ranked[: config.TOP_CANDIDATES]
 
     # 11-12. classify + optional LLM + persist
-    saved = 0
+    comparisons = 0
     for cand in top:
-        relation, reason = similarity.classify(cand, len(chunks))
-        if relation == similarity.DIFFERENT:
-            continue
-        evidence = cand.top_evidence()
-        if relation in (similarity.NEAR_DUPLICATE, similarity.SEMANTICALLY_RELATED):
-            llm_result = llm.justify(relation, cand.minhash_score, cand.semantic_score, evidence)
-            if llm_result and llm_result.get("reason"):
-                reason = llm_result["reason"]
-                if llm_result.get("changed_elements"):
-                    for e in evidence:
-                        e["changed_elements"] = llm_result["changed_elements"]
-        db.insert_match(
-            conn, document_id, cand.candidate_id, relation,
-            round(cand.minhash_score, 4), round(cand.semantic_score, 4),
-            reason, evidence,
-        )
-        saved += 1
+        _save_candidate_decision(conn, document_id, cand, len(chunks))
+        comparisons += 1
 
     db.set_status(conn, document_id, "PROCESSED")
-    log.info("document %s PROCESSED with %d relevant match(es)", document_id, saved)
+    log.info("document %s PROCESSED with %d comparison(s)", document_id, comparisons)
 
 
 def _gather_candidates(conn, case_id, document_id, chunks, vectors):
@@ -150,6 +135,24 @@ def _gather_candidates(conn, case_id, document_id, chunks, vectors):
             if prev is None or sim > prev[0]:
                 cs.best_per_source_chunk[idx] = (sim, chunks[idx], row["content"])
     return candidates
+
+
+def _save_candidate_decision(conn, source_id, cand, total_source_chunks):
+    relation, reason = similarity.classify(cand, total_source_chunks)
+    evidence = cand.top_evidence()
+    if relation in (similarity.NEAR_DUPLICATE, similarity.SEMANTICALLY_RELATED):
+        llm_result = llm.justify(relation, cand.minhash_score, cand.semantic_score, evidence)
+        if llm_result and llm_result.get("reason"):
+            reason = llm_result["reason"]
+            if llm_result.get("changed_elements"):
+                for e in evidence:
+                    e["changed_elements"] = llm_result["changed_elements"]
+    db.insert_match(
+        conn, source_id, cand.candidate_id, relation,
+        round(cand.minhash_score, 4), round(cand.semantic_score, 4),
+        reason, evidence,
+    )
+    return relation
 
 
 def _save_exact_match(conn, source_id, matched_id, relation, reason):
